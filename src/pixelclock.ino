@@ -29,13 +29,13 @@ void setup() {
     conf->setDefault("tz_offset_m", 0);
     conf->setDefault("topology", 0);
     
-    conf->setDefault("wifi_ssid", "Kampftoast");
-    conf->setDefault("wifi_pass", "dunkelstern738");
+    conf->setDefault("wifi_ssid", "");
+    conf->setDefault("wifi_pass", "");
     
     conf->setDefault("ntp_server", "time.nist.gov");
     conf->setDefault("ntp_enabled", 1);
     
-    conf->setDefault("mqtt_server", "10.0.1.150");
+    conf->setDefault("mqtt_server", "10.0.0.2");
     conf->setDefault("mqtt_port", 1883);
     conf->setDefault("mqtt_user", "pixelclock");
     conf->setDefault("mqtt_pass", "pixelclock");
