@@ -8,6 +8,14 @@ folder.
 
 To compile you will need Platform.io.
 
+## Images
+
+<img src="doc/Pixelclock CAD.png" width="550" alt="CAD Render of clock" />
+
+<img src="doc/Electronics CAD.png" width="550" alt="CAD Render of Electronics Housing" />
+
+<img src="doc/PCB Render.png" width="550" alt="CAD Render of PCB" />
+
 ## Basic settings
 
 For Hardware setup look into `/include/config.hpp` you can set up the following
@@ -28,7 +36,6 @@ You have to configure the device by connecting to the AP it will open (`Pixelclo
 - Webserver to serve Website
 - Add RTC support to PCB
 - Add RTC support to code
-- Add STL files for 3D printed parts
 - Documentation and pictures of finished project
 
 ## Done
