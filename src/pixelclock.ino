@@ -6,6 +6,7 @@
 #include "time_service.hpp"
 #include "pixelclock.hpp"
 
+#include "esp_wifi.h"
 
 #if LED_STRIP_ENABLED
 #include "rgbwled_service.hpp"
@@ -26,6 +27,9 @@ RGBWLedService *ledService;
 #endif
 
 void setup() {
+    setCpuFrequencyMhz(240);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    
     Serial.begin(115200);
     conf = new Settings();
     
