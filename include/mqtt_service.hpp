@@ -30,7 +30,7 @@ class MQTTService : SettingsCallback {
         void restart(std::function<void (void)>block);
         void reconnect();
         void publish_state();
-        char *autodetect_json(String part);
+        char *autodetect_json(String part, bool independent_brightness = false);
         void homeassistant();
 
     public:

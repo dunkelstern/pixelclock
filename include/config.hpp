@@ -17,5 +17,16 @@
 // the GPIO pin where you connected the LEDs
 #define NEOPIXEL_PIN 33
 
+// RGBW Strip with Mosfet control
+#define LED_STRIP_ENABLED 1
+#define RED_PIN 23
+#define GREEN_PIN 22
+#define BLUE_PIN 16
+#define WHITE_PIN 17
+
+#define RED_CORRECTION 1.0
+#define GREEN_CORRECTION 0.75
+#define BLUE_CORRECTION 0.25
+#define WHITE_CORRECTION 0.7
 
 #endif /* config_hpp__included */

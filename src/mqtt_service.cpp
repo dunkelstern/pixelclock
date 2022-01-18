@@ -23,12 +23,12 @@ static char *format_rgb(Color *color) {
 
 void MQTTService::init_mqtt() {
     espClient = new WiFiClient();
-    mqtt = new PubSubClient(*espClient);
-    mqtt->setServer(server, port);
-    mqtt->setKeepAlive(60);
-    mqtt->setCallback([&](char* topic, byte* message, unsigned int length) {
+    mqtt = new PubSubClient(server, port, [&](char* topic, byte* message, unsigned int length) {
         event(topic, message, length);
-    });
+    }, *espClient);
+    mqtt->setKeepAlive(15);
+    mqtt->setSocketTimeout(15);
+    mqtt->setBufferSize(1024);
 }
 
 void MQTTService::shutdown_mqtt() {
@@ -122,7 +122,7 @@ MQTTService::~MQTTService() {
     free(password);
 }
 
-char *MQTTService::autodetect_json(String part) {
+char *MQTTService::autodetect_json(String part, bool independent_brightness) {
     StaticJsonDocument <1024>json;
     JsonArray identifiers = json["device"].createNestedArray("identifiers");
     identifiers.add(MY_NAME);
@@ -137,15 +137,23 @@ char *MQTTService::autodetect_json(String part) {
     json["name"] = my_name + "_" + part;
     json["unique_id"] = my_name + "_" + part;
 
-    json["command_topic"] = my_name + "/switch";
-    json["state_topic"] = my_name + "/switch_state";
-
     json["rgb_command_topic"] = my_name + "/" + part + "/rgb";
     json["rgb_state_topic"] = my_name + "/" + part + "/rgb_state";
     //  json["rgb_value_template"] = "{{ red }},{{ green }},{{ blue }}";
     
-    json["brightness_command_topic"] = my_name + "/brightness";
-    json["brightness_state_topic"] = my_name + "/brightness_state";
+    if (independent_brightness) {
+        json["command_topic"] = my_name + "/" + part + "/switch";
+        json["state_topic"] = my_name + "/" + part + "/switch_state";
+
+        json["brightness_command_topic"] = my_name + "/" + part + "/brightness";
+        json["brightness_state_topic"] = my_name + "/" + part + "/brightness_state";
+    } else {
+        json["command_topic"] = my_name + "/switch";
+        json["state_topic"] = my_name + "/switch_state";
+
+        json["brightness_command_topic"] = my_name + "/brightness";
+        json["brightness_state_topic"] = my_name + "/brightness_state";
+    }
     json["brightness_value_template"] = "{{ value }}";
 
     char *result = (char *)calloc(1024, 1);    
@@ -156,8 +164,9 @@ char *MQTTService::autodetect_json(String part) {
 
 void MQTTService::publish_state() {
     char tz_string[6];
-    int tz_offset_hours = 0, tz_offset_minutes = 0, brightness, topology_offset, clock_enabled;
-    Color hour_color, minute_color, second_color;
+    int tz_offset_hours = 0, tz_offset_minutes = 0, brightness;
+    int topology_offset, clock_enabled, strip_enabled, strip_brightness;
+    Color hour_color, minute_color, second_color, strip_color;
     
     config->get("tz_offset_h", &tz_offset_hours);
     config->get("tz_offset_m", &tz_offset_minutes);
@@ -169,13 +178,19 @@ void MQTTService::publish_state() {
     
     config->get("brightness", &brightness);
     config->get("enabled", &clock_enabled);
+
+#if LED_STRIP_ENABLED
+    config->get("s_color", &strip_color);
+    config->get("s_brightness", &strip_brightness);
+    config->get("s_enabled", &strip_enabled);
+#endif
     
     if (tz_offset_hours < 0) {
         snprintf(tz_string, 6, "-%02d:%02d", abs(tz_offset_hours), abs(tz_offset_minutes));
     } else {
         snprintf(tz_string, 6, "%02d:%02d", abs(tz_offset_hours), abs(tz_offset_minutes));    
     }
-    char *h, *m, *s;
+    char *h, *m, *s, *ss;
     h = format_rgb(&hour_color);
     m = format_rgb(&minute_color);
     s = format_rgb(&second_color);
@@ -188,6 +203,14 @@ void MQTTService::publish_state() {
     mqtt->publish((my_name + "/switch_state").c_str(), clock_enabled ? "ON" : "OFF", true);
     mqtt->publish((my_name + "/tz_offset_state").c_str(), tz_string, true);
     mqtt->publish((my_name + "/topology_state").c_str(), String(topology_offset).c_str(), true);
+
+#if LED_STRIP_ENABLED
+    ss = format_rgb(&strip_color);
+    mqtt->publish((my_name + "/strip/rgb_state").c_str(), ss, true);
+    mqtt->publish((my_name + "/strip/brightness_state").c_str(), String(strip_brightness).c_str(), true);
+    mqtt->publish((my_name + "/strip/switch_state").c_str(), strip_enabled ? "ON" : "OFF", true);
+    free(ss);
+#endif
 
     free(h);
     free(m);
@@ -246,6 +269,22 @@ void MQTTService::event(char* top, byte* message, unsigned int length) {
         config->set("color_s", second_color);
         goto finished;
     }
+    
+    if (topic == String("strip/switch")) {
+        int strip_enabled = (msg == String("ON"));
+        config->set("s_enabled", strip_enabled, true);
+        goto finished;
+    }
+    if (topic == String("strip/brightness")) {
+        int brightness = msg.toInt();
+        config->set("s_brightness", brightness, true);
+        goto finished;
+    }
+    if (topic == String("strip/rgb")) {
+        Color strip_color = parse_rgb(msg);
+        config->set("s_color", strip_color);
+        goto finished;
+    }
     return;
     
 finished:
@@ -279,6 +318,14 @@ void MQTTService::homeassistant() {
     mqtt->print(json);
     mqtt->endPublish();
     free(json);
+
+#if LED_STRIP_ENABLED
+    json = autodetect_json(String("strip"), true);
+    mqtt->beginPublish((prefix + "/strip/config").c_str(), strlen(json), true);
+    mqtt->print(json);
+    mqtt->endPublish();
+    free(json);
+#endif
 }
 
 void MQTTService::reconnect() {
@@ -289,14 +336,19 @@ void MQTTService::reconnect() {
 
             // subscribe to settings
             String my_name = String(name);
-            mqtt->subscribe((my_name + "/hours/rgb").c_str());
-            mqtt->subscribe((my_name + "/minutes/rgb").c_str());
-            mqtt->subscribe((my_name + "/seconds/rgb").c_str());
-            mqtt->subscribe((my_name + "/brightness").c_str());
-            mqtt->subscribe((my_name + "/switch").c_str());
-            mqtt->subscribe((my_name + "/tz_offset").c_str());
-            mqtt->subscribe((my_name + "/topology").c_str());
+            mqtt->subscribe((my_name + "/hours/rgb").c_str(), 1);
+            mqtt->subscribe((my_name + "/minutes/rgb").c_str(), 1);
+            mqtt->subscribe((my_name + "/seconds/rgb").c_str(), 1);
+            mqtt->subscribe((my_name + "/brightness").c_str(), 1);
+            mqtt->subscribe((my_name + "/switch").c_str(), 1);
+            mqtt->subscribe((my_name + "/tz_offset").c_str(), 1);
+            mqtt->subscribe((my_name + "/topology").c_str(), 1);
 
+#if LED_STRIP_ENABLED
+            mqtt->subscribe((my_name + "/strip/brightness").c_str(), 1);
+            mqtt->subscribe((my_name + "/strip/switch").c_str(), 1);
+            mqtt->subscribe((my_name + "/strip/rgb").c_str(), 1);
+#endif
             // publish auto detect
             homeassistant();
         } else {

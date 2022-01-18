@@ -6,6 +6,11 @@
 #include "time_service.hpp"
 #include "pixelclock.hpp"
 
+
+#if LED_STRIP_ENABLED
+#include "rgbwled_service.hpp"
+#endif
+
 /*********************************************************
  * To change basic HW configuration look into config.hpp *
  *********************************************************/
@@ -15,6 +20,10 @@ WifiService *wifi;
 MQTTService *mqtt;
 TimeService *timeService;
 PixelClock *pixelClock;
+
+#if LED_STRIP_ENABLED
+RGBWLedService *ledService;
+#endif
 
 void setup() {
     Serial.begin(115200);
@@ -42,15 +51,26 @@ void setup() {
     conf->setDefault("mqtt_hass", 1);
     conf->setDefault("mqtt_enabled", 1);
     
+    
     wifi = new WifiService(conf, MY_NAME);
     mqtt = new MQTTService(conf, MY_NAME);
     timeService = new TimeService(conf);
     pixelClock = new PixelClock(conf, timeService);
+#if LED_STRIP_ENABLED
+    conf->setDefault("s_color", Color(32, 32, 32));
+    conf->setDefault("s_brightness", 255, true);
+    conf->setDefault("s_enabled", 1, true);
+
+    ledService = new RGBWLedService(conf);
+#endif
 }
 
 void loop() {
     timeService->loop();
     mqtt->loop();
     pixelClock->loop();
+#if LED_STRIP_ENABLED 
+    ledService->loop();
+#endif
     delay(33);
 }
